@@ -19,6 +19,21 @@ from utils.general import check_img_size, check_requirements, check_imshow, non_
 from utils.plots import plot_one_box
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
 from google.colab.patches import cv2_imshow
+import os
+from pathlib import Path
+from typing import Union
+import torch
+import cv2 as cv
+import numpy as np
+from deep_sort_realtime.deepsort_tracker import DeepSort
+from models.experimental import attempt_load
+from utils.general import check_img_size
+from utils.torch_utils import select_device, TracedModel
+from utils.datasets import letterbox
+from utils.general import non_max_suppression, scale_coords
+from utils.plots import plot_one_box, plot_one_box_PIL
+from copy import deepcopy
+
 # License Plate Detection
 image_size = 640
 # Initialize
@@ -78,25 +93,21 @@ lpr_model = attempt_load(lpr_weight, map_location=device)  # load FP32 model
 stride = int(lpr_model.stride.max())  # model stride
 imgsz = check_img_size(imgsz, s=stride)  # check img_size
 lpr_model = TracedModel(lpr_model, device, img_size)
-def recognize_plate(source, conf=0.3):
 
+def recognize_plate(source, conf=0.3):
   # Set Dataloader
   dataset = LoadImages(source, img_size=imgsz, stride=stride)
-
   # Get names and colors
   names = lpr_model.module.names if hasattr(lpr_model, 'module') else lpr_model.names
   colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
-
   old_img_w = old_img_h = imgsz
   old_img_b = 1
-
   for path, img, im0s, vid_cap in dataset:
     img = torch.from_numpy(img).to(device)
     img = img.float()  # uint8 to fp16/32
     img /= 255.0  # 0 - 255 to 0.0 - 1.0
     if img.ndimension() == 3:
       img = img.unsqueeze(0)
-
     # Warmup
     if device.type != 'cpu' and (old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
       old_img_b = img.shape[0]
@@ -104,20 +115,15 @@ def recognize_plate(source, conf=0.3):
       old_img_w = img.shape[3]
       for i in range(3):
         lpr_model(img, augment=True)[0]
-
     # Inference
     pred = lpr_model(img, augment=True)[0]
-
     # Apply NMS
     pred = non_max_suppression(pred, conf)
-
     lines = []
     # Process detections
     for i, det in enumerate(pred):  # detections per image
-
       _, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
       gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
-
       if len(det):
         # Rescale boxes from img_size to im0 size
         det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
@@ -166,7 +172,6 @@ def extract_number_plate(rects):
   return number_plate
 
 def recognize_plate(source, conf=0.3):
-
   # Set Dataloader
   dataset = LoadImages(source, img_size=imgsz, stride=stride)
 
@@ -232,21 +237,7 @@ def recognize_plate(source, conf=0.3):
 
   return lines
 
-import os
-from pathlib import Path
-from typing import Union
-import torch
-import cv2 as cv
-import numpy as np
-from deep_sort_realtime.deepsort_tracker import DeepSort
-from models.experimental import attempt_load
-from utils.general import check_img_size
-from utils.torch_utils import select_device, TracedModel
-from utils.datasets import letterbox
-from utils.general import non_max_suppression, scale_coords
-from utils.plots import plot_one_box, plot_one_box_PIL
-from copy import deepcopy
-# import easyocr
+
 
 
 images_n_vids_path = "/content/"
